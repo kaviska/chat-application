@@ -1,0 +1,12 @@
+{
+  "name": "websocket-bridge",
+  "version": "1.0.0",
+  "description": "WebSocket to TCP bridge for Java chat server",
+  "main": "websocket-bridge.js",
+  "scripts": {
+    "start": "node websocket-bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
