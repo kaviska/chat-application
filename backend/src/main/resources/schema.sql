@@ -26,7 +26,25 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (receiver) REFERENCES users(email) ON DELETE CASCADE
 );
 
--- Index for faster queries
-CREATE INDEX idx_sender ON messages(sender);
-CREATE INDEX idx_receiver ON messages(receiver);
-CREATE INDEX idx_timestamp ON messages(timestamp);
+-- Files table
+CREATE TABLE IF NOT EXISTS files (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    filename VARCHAR(255) NOT NULL,
+    file_data LONGBLOB NOT NULL,
+    file_type VARCHAR(100),
+    sender VARCHAR(255) NOT NULL,
+    receiver VARCHAR(255) NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender) REFERENCES users(email) ON DELETE CASCADE,
+    FOREIGN KEY (receiver) REFERENCES users(email) ON DELETE CASCADE
+);
+
+-- Indexes for messages table
+CREATE INDEX idx_messages_sender ON messages(sender);
+CREATE INDEX idx_messages_receiver ON messages(receiver);
+CREATE INDEX idx_messages_timestamp ON messages(timestamp);
+
+-- Indexes for files table
+CREATE INDEX idx_files_sender ON files(sender);
+CREATE INDEX idx_files_receiver ON files(receiver);
+CREATE INDEX idx_files_timestamp ON files(timestamp);

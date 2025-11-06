@@ -96,6 +96,13 @@ public class MainServer {
     }
 
     /**
+     * Get a specific client by email
+     */
+    public ClientHandler getClient(String email) {
+        return connectedClients.get(email);
+    }
+
+    /**
      * Broadcast message to all connected clients except the sender
      */
     public void broadcast(String message, String senderEmail) {

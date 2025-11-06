@@ -1,6 +1,7 @@
 package com.chatapp.model;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 public class Message {
 
@@ -8,15 +9,9 @@ public class Message {
                          // user_joined...
     private String sender;
     private String receiver;
-    private String content;
+    private Object content; // Can be String or JsonObject
     private long timestamp;
     private String username;
-
-    // ✅ File fields
-    private String fileName;
-    private String fileType;
-    private long fileSize;
-    private String fileData; // Base64 string
 
     public Message() {
         this.timestamp = System.currentTimeMillis();
@@ -63,11 +58,25 @@ public class Message {
         this.receiver = receiver;
     }
 
-    public String getContent() {
+    public Object getContent() {
         return content;
     }
 
-    public void setContent(String content) {
+    public String getContentAsString() {
+        if (content instanceof String) {
+            return (String) content;
+        }
+        return content.toString();
+    }
+
+    public JsonObject getContentAsJson() {
+        if (content instanceof JsonObject) {
+            return (JsonObject) content;
+        }
+        return null;
+    }
+
+    public void setContent(Object content) {
         this.content = content;
     }
 
@@ -87,39 +96,7 @@ public class Message {
         this.username = username;
     }
 
-    // ✅ FILE FIELD GETTERS & SETTERS
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public String getFileType() {
-        return fileType;
-    }
-
-    public void setFileType(String fileType) {
-        this.fileType = fileType;
-    }
-
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    public void setFileSize(long fileSize) {
-        this.fileSize = fileSize;
-    }
-
-    public String getFileData() {
-        return fileData;
-    }
-
-    public void setFileData(String fileData) {
-        this.fileData = fileData;
-    }
+    // No longer need file-specific getters and setters as they're part of content
 
     // ✅ JSON Convert
     public String toJson() {
@@ -138,13 +115,9 @@ public class Message {
                 "type='" + type + '\'' +
                 ", sender='" + sender + '\'' +
                 ", receiver='" + receiver + '\'' +
-                ", content='" + content + '\'' +
+                ", content=" + content +
                 ", timestamp=" + timestamp +
                 ", username='" + username + '\'' +
-                ", fileName='" + fileName + '\'' +
-                ", fileType='" + fileType + '\'' +
-                ", fileSize=" + fileSize +
-                ", fileData length=" + (fileData != null ? fileData.length() : 0) +
                 '}';
     }
 }
