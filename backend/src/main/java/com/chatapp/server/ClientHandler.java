@@ -98,7 +98,7 @@ public class ClientHandler implements Runnable {
                     break;
 
                 case "get_files":
-                    sendFilesList();
+                    sendFilesList(message);
                     break;
 
                 default:
@@ -192,9 +192,19 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void sendFilesList() {
+    private void sendFilesList(Message requestMessage) {
         try {
-            List<File> files = fileRepository.getFilesForUser(userEmail);
+            // Determine target email: prefer authenticated userEmail, fall back to request
+            // sender
+            String targetEmail = (userEmail != null && !userEmail.isEmpty()) ? userEmail
+                    : (requestMessage != null && requestMessage.getSender() != null
+                            && !requestMessage.getSender().isEmpty()
+                                    ? requestMessage.getSender()
+                                    : null);
+
+            System.out.println("📁 sendFilesList requested for: " + targetEmail);
+            List<File> files = fileRepository.getFilesForUser(targetEmail);
+            System.out.println("📁 Found " + (files != null ? files.size() : 0) + " files for: " + targetEmail);
             JsonObject response = new JsonObject();
             response.addProperty("type", "files_list");
 
