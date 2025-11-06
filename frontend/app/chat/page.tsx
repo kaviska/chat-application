@@ -30,8 +30,13 @@ export default function ChatPage() {
         await socketClient.connect("ws://localhost:8082");
         setIsConnected(true);
 
-        // Request stored files
-        socketClient.send({ type: "get_files" });
+        // Request stored files (include sender so server can return user-specific files)
+        socketClient.send({ type: "get_files", sender: user.email });
+        // Re-request files shortly after connect in case the server-side history or
+        // authentication sequence causes the first request to return nothing.
+        setTimeout(() => {
+          socketClient.send({ type: "get_files", sender: user.email });
+        }, 1500);
 
         socketClient.on("*", (message: Message) => {
           switch (message.type) {
@@ -56,28 +61,44 @@ export default function ChatPage() {
               break;
 
             // ✅ Files list response
-            case "files_list":
+            case "files_list": {
               const files = message.files || [];
+              console.log('📥 Received files_list:', files.length, files);
               setStoredFiles(files);
-              // Add file messages to chat
-              files.forEach((file: StoredFile) => {
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    type: "file",
-                    sender: file.sender,
-                    receiver: file.receiver,
-                    timestamp: file.timestamp,
-                    content: {
-                      filename: file.filename,
-                      type: file.fileType,
-                      data: file.data
-                    }
-                  } as Message,
-                ]);
+
+              // Convert stored files to file messages and merge with existing messages (dedupe)
+              const fileMessages: Message[] = files.map((file: StoredFile) => ({
+                type: "file",
+                sender: file.sender,
+                receiver: file.receiver,
+                timestamp: file.timestamp,
+                content: {
+                  filename: file.filename,
+                  type: file.fileType,
+                  data: file.data,
+                } as FileContent,
+              } as Message));
+
+              setMessages((prev) => {
+                const combined = [...prev, ...fileMessages];
+                const seen = new Set<string>();
+                const deduped: Message[] = [];
+
+                for (const m of combined) {
+                  const key = `${m.type}-${m.timestamp}-${m.sender}-${typeof m.content === 'object' && 'filename' in m.content ? (m.content as FileContent).filename : m.content}`;
+                  if (!seen.has(key)) {
+                    seen.add(key);
+                    deduped.push(m);
+                  }
+                }
+
+                // Sort by timestamp asc so history/order is preserved
+                deduped.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                return deduped;
               });
+
               break;
-              break;
+            }
 
             // ✅ Online users list
             case "user_list":
@@ -97,9 +118,37 @@ export default function ChatPage() {
                 const history = typeof message.content === 'string'
                   ? JSON.parse(message.content)
                   : message.content;
-                setMessages(history);
-              } catch {
-                console.error("Invalid history message format");
+
+                // Merge history with any stored files we already received
+                const fileMessagesFromStored = storedFiles.map((file) => ({
+                  type: 'file',
+                  sender: file.sender,
+                  receiver: file.receiver,
+                  timestamp: file.timestamp,
+                  content: {
+                    filename: file.filename,
+                    type: file.fileType,
+                    data: file.data,
+                  } as FileContent,
+                } as Message));
+
+                const combined = Array.isArray(history) ? [...history, ...fileMessagesFromStored] : fileMessagesFromStored;
+
+                // Dedupe combined messages
+                const seen = new Set<string>();
+                const deduped: Message[] = [];
+                for (const m of combined) {
+                  const key = `${m.type}-${m.timestamp}-${m.sender}-${typeof m.content === 'object' && 'filename' in m.content ? (m.content as FileContent).filename : m.content}`;
+                  if (!seen.has(key)) {
+                    seen.add(key);
+                    deduped.push(m);
+                  }
+                }
+
+                deduped.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                setMessages(deduped);
+              } catch (err) {
+                console.error("Invalid history message format", err);
               }
               break;
           }
