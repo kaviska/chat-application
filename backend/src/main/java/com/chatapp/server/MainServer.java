@@ -96,6 +96,13 @@ public class MainServer {
     }
 
     /**
+     * Get a specific client by email
+     */
+    public ClientHandler getClient(String email) {
+        return connectedClients.get(email);
+    }
+
+    /**
      * Broadcast message to all connected clients except the sender
      */
     public void broadcast(String message, String senderEmail) {
@@ -123,11 +130,11 @@ public class MainServer {
      */
     public void broadcastUserList() {
         List<User> onlineUsers = authService.getOnlineUsers();
-        
+
         Message userListMsg = new Message();
         userListMsg.setType("user_list");
         userListMsg.setContent(gson.toJson(onlineUsers));
-        
+
         broadcast(userListMsg.toJson(), null);
     }
 
@@ -143,7 +150,7 @@ public class MainServer {
      */
     public void shutdown() {
         running = false;
-        
+
         System.out.println("\n🛑 Shutting down server...");
 
         // Close all client connections
@@ -176,7 +183,7 @@ public class MainServer {
 
     public static void main(String[] args) {
         MainServer server = new MainServer();
-        
+
         // Add shutdown hook for graceful shutdown
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("\n⚠️  Shutdown signal received");

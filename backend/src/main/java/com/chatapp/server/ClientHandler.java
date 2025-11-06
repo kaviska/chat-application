@@ -3,8 +3,10 @@ package com.chatapp.server;
 import com.chatapp.auth.UserAuthService;
 import com.chatapp.database.DatabaseManager;
 import com.chatapp.database.MessageRepository;
+import com.chatapp.database.FileRepository;
 import com.chatapp.model.Message;
 import com.chatapp.model.User;
+import com.chatapp.model.File;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -21,13 +23,16 @@ public class ClientHandler implements Runnable {
     private String username;
     private final UserAuthService authService;
     private final MessageRepository messageRepository;
+    private final FileRepository fileRepository;
     private final Gson gson;
 
     public ClientHandler(Socket socket, MainServer server) {
         this.clientSocket = socket;
         this.server = server;
         this.authService = new UserAuthService();
+        DatabaseManager dbManager = DatabaseManager.getInstance();
         this.messageRepository = new MessageRepository();
+        this.fileRepository = new FileRepository(dbManager);
         this.gson = new Gson();
     }
 
@@ -53,43 +58,186 @@ public class ClientHandler implements Runnable {
     private void handleMessage(String jsonMessage) {
         try {
             Message message = Message.fromJson(jsonMessage);
-            
+            System.out.println("📨 Handling message type: " + message.getType());
+
             switch (message.getType()) {
                 case "register":
                     handleRegister(message);
                     break;
+
                 case "login":
                     handleLogin(message);
                     break;
+
                 case "message":
                     handlePublicMessage(message);
                     break;
+
+                case "file":
+                    handleFileMessage(message);
+                    break;
+
                 case "private_message":
                     handlePrivateMessage(message);
                     break;
+
                 case "get_users":
                     handleGetUsers();
                     break;
+
                 case "get_history":
                     handleGetHistory(message);
                     break;
+
                 case "typing":
                     handleTyping(message);
                     break;
+
                 case "logout":
                     handleLogout();
                     break;
+
+                case "get_files":
+                    sendFilesList(message);
+                    break;
+
                 default:
                     sendError("Unknown message type: " + message.getType());
             }
+
         } catch (Exception e) {
             e.printStackTrace();
             sendError("Invalid message format");
         }
     }
 
+    private void handleFileMessage(Message message) {
+        try {
+            System.out.println("💾 Handling file message...");
+            System.out.println("Message content: " + message.getContent());
+
+            Object rawContent = message.getContent();
+            JsonObject content;
+
+            try {
+                if (rawContent instanceof JsonObject) {
+                    content = (JsonObject) rawContent;
+                } else if (rawContent instanceof com.google.gson.internal.LinkedTreeMap) {
+                    // Convert LinkedTreeMap to JsonObject
+                    String jsonStr = gson.toJson(rawContent);
+                    content = gson.fromJson(jsonStr, JsonObject.class);
+                } else if (rawContent instanceof String) {
+                    content = gson.fromJson((String) rawContent, JsonObject.class);
+                } else {
+                    throw new Exception(
+                            "Invalid file message format: unexpected content type: " + rawContent.getClass().getName());
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to parse file content: " + e.getMessage());
+                System.err.println(
+                        "Raw content type: " + (rawContent != null ? rawContent.getClass().getName() : "null"));
+                System.err.println("Raw content value: " + rawContent);
+                throw e;
+            }
+
+            if (content == null) {
+                throw new Exception("Invalid file message format: failed to parse content as JSON object");
+            }
+
+            String filename = content.get("filename").getAsString();
+            String fileData = content.get("data").getAsString();
+            String fileType = content.get("type").getAsString();
+
+            // Validate and decode base64 file data
+            byte[] decodedData;
+            if (fileData.contains(",")) {
+                // Handle data URLs (e.g., "data:image/png;base64,ABC123...")
+                String[] parts = fileData.split(",");
+                if (parts.length < 2 || parts[1].isEmpty()) {
+                    throw new Exception("Invalid or empty file data");
+                }
+                decodedData = java.util.Base64.getDecoder().decode(parts[1]);
+            } else {
+                if (fileData.isEmpty()) {
+                    throw new Exception("Empty file data");
+                }
+                // Handle raw base64 data
+                decodedData = java.util.Base64.getDecoder().decode(fileData);
+            }
+
+            // Determine sender: prefer authenticated userEmail, fall back to message.sender
+            String sender = (userEmail != null && !userEmail.isEmpty()) ? userEmail
+                    : (message.getSender() != null && !message.getSender().isEmpty() ? message.getSender() : null);
+
+            if (sender == null || sender.isEmpty()) {
+                throw new Exception("User must be authenticated to share files");
+            }
+
+            // Create and save file object (set receiver to null for group sharing)
+            File file = new File(filename, decodedData, fileType, sender, null);
+            System.out.println("📦 Creating file: " + filename + " (Type: " + fileType + ", Size: " + decodedData.length
+                    + " bytes)");
+            fileRepository.saveFile(file);
+
+            // Always broadcast the file message to all clients for group sharing
+            message.setReceiver(null); // Ensure receiver is null for broadcasting
+            server.broadcast(message.toJson(), null);
+            System.out.println("📢 Broadcasting file to all users: " + filename);
+
+            System.out.println("📦 File saved and shared: " + filename);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError("Failed to process file: " + e.getMessage());
+        }
+    }
+
+    private void sendFilesList(Message requestMessage) {
+        try {
+            // Determine target email: prefer authenticated userEmail, fall back to request
+            // sender
+            String targetEmail = (userEmail != null && !userEmail.isEmpty()) ? userEmail
+                    : (requestMessage != null && requestMessage.getSender() != null
+                            && !requestMessage.getSender().isEmpty()
+                                    ? requestMessage.getSender()
+                                    : null);
+
+            System.out.println("📁 sendFilesList requested for: " + targetEmail);
+            List<File> files = fileRepository.getFilesForUser(targetEmail);
+            System.out.println("📁 Found " + (files != null ? files.size() : 0) + " files for: " + targetEmail);
+            JsonObject response = new JsonObject();
+            response.addProperty("type", "files_list");
+
+            com.google.gson.JsonArray fileArray = new com.google.gson.JsonArray();
+            for (File file : files) {
+                JsonObject fileObj = new JsonObject();
+                fileObj.addProperty("id", file.getId());
+                fileObj.addProperty("filename", file.getFilename());
+                fileObj.addProperty("fileType", file.getFileType());
+                fileObj.addProperty("sender", file.getSender());
+                fileObj.addProperty("receiver", file.getReceiver());
+                fileObj.addProperty("timestamp", file.getTimestamp().getTime());
+
+                // Convert file data to base64
+                String base64Data = "data:" + file.getFileType() + ";base64," +
+                        java.util.Base64.getEncoder().encodeToString(file.getFileData());
+                fileObj.addProperty("data", base64Data);
+
+                fileArray.add(fileObj);
+            }
+
+            response.add("files", fileArray);
+            sendMessage(response.toString());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendError("Failed to retrieve files: " + e.getMessage());
+        }
+    }
+
     private void handleRegister(Message message) {
-        JsonObject content = gson.fromJson(message.getContent(), JsonObject.class);
+        String contentStr = message.getContentAsString();
+        JsonObject content = gson.fromJson(contentStr, JsonObject.class);
         String email = content.get("email").getAsString();
         String password = content.get("password").getAsString();
         String username = content.get("username").getAsString();
@@ -98,19 +246,20 @@ public class ClientHandler implements Runnable {
 
         Message response = new Message();
         response.setType("register_response");
-        
+
         if (success) {
             response.setContent("{\"success\": true, \"message\": \"Registration successful\"}");
             System.out.println("✅ User registered: " + email);
         } else {
             response.setContent("{\"success\": false, \"message\": \"Registration failed. Email may already exist.\"}");
         }
-        
+
         sendMessage(response.toJson());
     }
 
     private void handleLogin(Message message) {
-        JsonObject content = gson.fromJson(message.getContent(), JsonObject.class);
+        String contentStr = message.getContentAsString();
+        JsonObject content = gson.fromJson(contentStr, JsonObject.class);
         String email = content.get("email").getAsString();
         String password = content.get("password").getAsString();
 
@@ -131,15 +280,10 @@ public class ClientHandler implements Runnable {
             responseContent.addProperty("message", "Login successful");
             response.setContent(responseContent.toString());
 
-            System.out.println("✅ User logged in: " + email);
-            
-            // Send login response
             sendMessage(response.toJson());
+            System.out.println("✅ User logged in: " + email);
 
-            // Notify all users that someone joined
             broadcastUserJoined();
-
-            // Send recent messages to the newly logged-in user
             sendRecentMessages();
 
         } else {
@@ -149,19 +293,16 @@ public class ClientHandler implements Runnable {
     }
 
     private void handlePublicMessage(Message message) {
-        // Check if this connection is authenticated OR if the sender is authenticated on another connection
         String senderEmail = message.getSender();
-        
+
         if (userEmail == null && senderEmail == null) {
             sendError("Not authenticated");
             return;
         }
-        
-        // Use the sender from message if this connection is not authenticated but sender is provided
+
         String effectiveSender = userEmail != null ? userEmail : senderEmail;
         String effectiveUsername = username;
-        
-        // Get username from auth service if not set on this connection
+
         if (effectiveUsername == null && effectiveSender != null) {
             User user = authService.getUserByEmail(effectiveSender);
             if (user != null) {
@@ -169,26 +310,18 @@ public class ClientHandler implements Runnable {
             }
         }
 
-        System.out.println("📝 Public message from " + effectiveUsername + " (" + effectiveSender + "): " + message.getContent());
+        String content = message.getContentAsString();
+        System.out.println("📝 Public message from " + effectiveUsername + ": " + content);
 
-        // Save to database
-        boolean saved = messageRepository.saveMessage(effectiveSender, null, message.getContent());
-        
-        if (!saved) {
-            System.err.println("❌ Failed to save public message to database!");
-        } else {
-            System.out.println("✅ Message saved to database");
-        }
+        messageRepository.saveMessage(effectiveSender, null, content);
 
-        // Prepare broadcast message
         Message broadcastMsg = new Message();
         broadcastMsg.setType("message");
         broadcastMsg.setSender(effectiveSender);
         broadcastMsg.setUsername(effectiveUsername);
-        broadcastMsg.setContent(message.getContent());
+        broadcastMsg.setContent(content);
         broadcastMsg.setTimestamp(System.currentTimeMillis());
 
-        // Broadcast to all connected clients
         server.broadcast(broadcastMsg.toJson(), null);
     }
 
@@ -199,60 +332,51 @@ public class ClientHandler implements Runnable {
         }
 
         String receiver = message.getReceiver();
-        
-        System.out.println("📨 Private message from " + username + " (" + userEmail + ") to " + receiver + ": " + message.getContent());
-        
-        // Save to database
-        boolean saved = messageRepository.saveMessage(userEmail, receiver, message.getContent());
-        
-        if (!saved) {
-            System.err.println("❌ Failed to save private message to database!");
-        }
 
-        // Prepare private message
+        String content = message.getContentAsString();
+        messageRepository.saveMessage(userEmail, receiver, content);
+
         Message privateMsg = new Message();
         privateMsg.setType("private_message");
         privateMsg.setSender(userEmail);
         privateMsg.setUsername(username);
         privateMsg.setReceiver(receiver);
-        privateMsg.setContent(message.getContent());
+        privateMsg.setContent(content);
         privateMsg.setTimestamp(System.currentTimeMillis());
 
-        // Send to receiver
         server.sendToUser(receiver, privateMsg.toJson());
-        
-        // Send confirmation to sender
         sendMessage(privateMsg.toJson());
     }
 
     private void handleGetUsers() {
         List<User> onlineUsers = authService.getOnlineUsers();
-        
+
         Message response = new Message();
         response.setType("user_list");
         response.setContent(gson.toJson(onlineUsers));
-        
+
         sendMessage(response.toJson());
     }
 
     private void handleGetHistory(Message message) {
         List<Message> history = messageRepository.getRecentPublicMessages(50);
-        
+
         Message response = new Message();
         response.setType("history");
         response.setContent(gson.toJson(history));
-        
+
         sendMessage(response.toJson());
     }
 
     private void handleTyping(Message message) {
-        if (userEmail == null) return;
+        if (userEmail == null)
+            return;
 
         Message typingMsg = new Message();
         typingMsg.setType("typing");
         typingMsg.setSender(userEmail);
         typingMsg.setUsername(username);
-        typingMsg.setContent(message.getContent()); // "typing" or "stopped"
+        typingMsg.setContent(message.getContent());
 
         server.broadcast(typingMsg.toJson(), userEmail);
     }
@@ -263,11 +387,11 @@ public class ClientHandler implements Runnable {
 
     private void sendRecentMessages() {
         List<Message> recentMessages = messageRepository.getRecentPublicMessages(50);
-        
+
         Message response = new Message();
         response.setType("history");
         response.setContent(gson.toJson(recentMessages));
-        
+
         sendMessage(response.toJson());
     }
 
@@ -277,10 +401,8 @@ public class ClientHandler implements Runnable {
         statusMsg.setSender(userEmail);
         statusMsg.setUsername(username);
         statusMsg.setContent(username + " joined the chat");
-        
+
         server.broadcast(statusMsg.toJson(), userEmail);
-        
-        // Also send updated user list to everyone
         handleGetUsers();
         server.broadcastUserList();
     }
@@ -291,7 +413,7 @@ public class ClientHandler implements Runnable {
         statusMsg.setSender(userEmail);
         statusMsg.setUsername(username);
         statusMsg.setContent(username + " left the chat");
-        
+
         server.broadcast(statusMsg.toJson(), null);
         server.broadcastUserList();
     }
@@ -316,11 +438,14 @@ public class ClientHandler implements Runnable {
                 server.removeClient(userEmail);
                 broadcastUserLeft();
             }
-            
-            if (in != null) in.close();
-            if (out != null) out.close();
-            if (clientSocket != null) clientSocket.close();
-            
+
+            if (in != null)
+                in.close();
+            if (out != null)
+                out.close();
+            if (clientSocket != null)
+                clientSocket.close();
+
         } catch (IOException e) {
             e.printStackTrace();
         }

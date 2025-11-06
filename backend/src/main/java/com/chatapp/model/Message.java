@@ -1,12 +1,15 @@
 package com.chatapp.model;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 public class Message {
-    private String type; // "message", "login", "register", "user_list", "status", "private_message", "typing"
+
+    private String type; // message, private_message, login, register, file, typing, user_list,
+                         // user_joined...
     private String sender;
-    private String receiver; // null for public messages
-    private String content;
+    private String receiver;
+    private Object content; // Can be String or JsonObject
     private long timestamp;
     private String username;
 
@@ -29,7 +32,8 @@ public class Message {
         this.timestamp = System.currentTimeMillis();
     }
 
-    // Getters and Setters
+    // ======== Getters and Setters =========
+
     public String getType() {
         return type;
     }
@@ -54,11 +58,25 @@ public class Message {
         this.receiver = receiver;
     }
 
-    public String getContent() {
+    public Object getContent() {
         return content;
     }
 
-    public void setContent(String content) {
+    public String getContentAsString() {
+        if (content instanceof String) {
+            return (String) content;
+        }
+        return content.toString();
+    }
+
+    public JsonObject getContentAsJson() {
+        if (content instanceof JsonObject) {
+            return (JsonObject) content;
+        }
+        return null;
+    }
+
+    public void setContent(Object content) {
         this.content = content;
     }
 
@@ -78,13 +96,14 @@ public class Message {
         this.username = username;
     }
 
-    // Convert to JSON
+    // No longer need file-specific getters and setters as they're part of content
+
+    // ✅ JSON Convert
     public String toJson() {
         Gson gson = new Gson();
         return gson.toJson(this);
     }
 
-    // Create from JSON
     public static Message fromJson(String json) {
         Gson gson = new Gson();
         return gson.fromJson(json, Message.class);
@@ -96,7 +115,7 @@ public class Message {
                 "type='" + type + '\'' +
                 ", sender='" + sender + '\'' +
                 ", receiver='" + receiver + '\'' +
-                ", content='" + content + '\'' +
+                ", content=" + content +
                 ", timestamp=" + timestamp +
                 ", username='" + username + '\'' +
                 '}';
