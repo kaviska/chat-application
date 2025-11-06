@@ -6,13 +6,31 @@ export interface User {
 }
 
 export interface Message {
-  type: 'message' | 'private_message' | 'login_response' | 'register_response' | 'user_list' | 'user_joined' | 'user_left' | 'typing' | 'history' | 'error';
+  type:
+    | 'message'
+    | 'private_message'
+    | 'login_response'
+    | 'register_response'
+    | 'user_list'
+    | 'user_joined'
+    | 'user_left'
+    | 'typing'
+    | 'history'
+    | 'error'
+    | 'file';
+
   sender?: string;
   receiver?: string;
   content: string;
   username?: string;
   timestamp?: number;
+
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  fileData?: string; // base64 file
 }
+
 
 export interface AuthResponse {
   success: boolean;

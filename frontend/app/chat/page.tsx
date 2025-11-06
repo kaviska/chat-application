@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/context';
-import { socketClient } from '@/lib/socket';
-import { MessageBubble } from '@/components/MessageBubble';
-import { MessageInput } from '@/components/MessageInput';
-import { UserList } from '@/components/UserList';
-import { LogOut, MessageCircle } from 'lucide-react';
-import { User, Message } from '@/types';
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/context";
+import { socketClient } from "@/lib/socket";
+import { MessageBubble } from "@/components/MessageBubble";
+import { MessageInput } from "@/components/MessageInput";
+import { UserList } from "@/components/UserList";
+import { LogOut, MessageCircle } from "lucide-react";
+import { User, Message } from "@/types";
 
 export default function ChatPage() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -20,53 +20,73 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
-    // Connect to server
     const connectToServer = async () => {
       try {
-        await socketClient.connect('ws://localhost:8082');
+        await socketClient.connect("ws://localhost:8082");
         setIsConnected(true);
 
-        // Setup message handlers
-        socketClient.on('*', (message: Message) => {
+        socketClient.on("*", (message: Message) => {
           switch (message.type) {
-            case 'message':
-            case 'private_message':
-            case 'user_joined':
-            case 'user_left':
+            // ✅ Normal text messages
+            case "message":
+            case "private_message":
+            case "user_joined":
+            case "user_left":
               setMessages((prev) => [...prev, message]);
               break;
-            
-            case 'user_list':
-              const users = JSON.parse(message.content);
-              setOnlineUsers(users);
+
+            // ✅ File message
+            case "file":
+              setMessages((prev) => [
+                ...prev,
+                {
+                  ...message,
+                  content: `${message.sender} sent a file`,
+                },
+              ]);
               break;
-            
-            case 'history':
-              const history = JSON.parse(message.content);
-              setMessages(history);
+
+            // ✅ Online users list
+            case "user_list":
+              try {
+                const users = JSON.parse(message.content);
+                setOnlineUsers(users);
+              } catch {
+                console.error("Invalid user list format");
+              }
+              break;
+
+            // ✅ History
+            case "history":
+              try {
+                const history = JSON.parse(message.content);
+                setMessages(history);
+              } catch {
+                console.error("Invalid history message format");
+              }
               break;
           }
         });
 
-        // If already logged in via localStorage, just get history
+        // request chat history
         socketClient.send({
-          type: 'get_history',
+          type: "get_history",
           sender: user.email,
-          content: '',
+          content: "",
         });
 
+        // request online user list
         socketClient.send({
-          type: 'get_users',
+          type: "get_users",
           sender: user.email,
-          content: '',
+          content: "",
         });
-
       } catch (error) {
-        console.error('Failed to connect:', error);
+        console.error("Failed to connect:", error);
         setIsConnected(false);
       }
     };
@@ -78,46 +98,52 @@ export default function ChatPage() {
     };
   }, [isAuthenticated, user, router]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // ✅ Auto-scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = (content: string) => {
     if (!isConnected || !user) return;
 
     socketClient.send({
-      type: 'message',
+      type: "message",
       sender: user.email,
       content,
     });
   };
 
+  const handleSendFile = async (file: File) => {
+    if (!isConnected || !user) return;
+
+    await socketClient.sendFile(file, user.email);
+  };
+
   const handleLogout = () => {
     socketClient.send({
-      type: 'logout',
+      type: "logout",
       sender: user?.email,
-      content: '',
+      content: "",
     });
     socketClient.disconnect();
     logout();
-    router.push('/login');
+    router.push("/login");
   };
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
+      {/* HEADER */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-2 rounded-lg">
             <MessageCircle className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Chat Application</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              Chat Application
+            </h1>
             <p className="text-sm text-gray-500">
               {isConnected ? (
                 <span className="text-green-600">● Connected</span>
@@ -133,6 +159,7 @@ export default function ChatPage() {
             <div className="font-semibold text-gray-900">{user?.username}</div>
             <div className="text-sm text-gray-500">{user?.email}</div>
           </div>
+
           <button
             onClick={handleLogout}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -143,11 +170,10 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* MAIN CONTENT */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Chat Area */}
+        {/* CHAT AREA */}
         <div className="flex-1 flex flex-col">
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 bg-white">
             {messages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-500">
@@ -167,14 +193,14 @@ export default function ChatPage() {
             )}
           </div>
 
-          {/* Message Input */}
+          {/* INPUT AREA */}
           <MessageInput
             onSendMessage={handleSendMessage}
+            onSendFile={handleSendFile}
             disabled={!isConnected}
           />
         </div>
 
-        {/* User List Sidebar */}
         <UserList users={onlineUsers} currentUserEmail={user?.email} />
       </div>
     </div>

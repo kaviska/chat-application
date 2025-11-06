@@ -11,7 +11,7 @@ class SocketClient {
         this.socket = new WebSocket(serverUrl);
 
         this.socket.onopen = () => {
-          console.log('✅ WebSocket connected');
+          console.log("✅ WebSocket connected");
           this.reconnectAttempts = 0;
           resolve();
         };
@@ -23,27 +23,26 @@ class SocketClient {
             if (handler) {
               handler(message);
             }
-            
+
             // Call the generic 'message' handler for all messages
-            const genericHandler = this.messageHandlers.get('*');
+            const genericHandler = this.messageHandlers.get("*");
             if (genericHandler) {
               genericHandler(message);
             }
           } catch (error) {
-            console.error('Error parsing message:', error);
+            console.error("Error parsing message:", error);
           }
         };
 
         this.socket.onerror = (error) => {
-          console.error('❌ WebSocket error:', error);
+          console.error("❌ WebSocket error:", error);
           reject(error);
         };
 
         this.socket.onclose = () => {
-          console.log('🔌 WebSocket disconnected');
+          console.log("🔌 WebSocket disconnected");
           this.attemptReconnect(serverUrl);
         };
-
       } catch (error) {
         reject(error);
       }
@@ -53,13 +52,15 @@ class SocketClient {
   private attemptReconnect(serverUrl: string) {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`🔄 Reconnecting... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      
+      console.log(
+        `🔄 Reconnecting... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      );
+
       setTimeout(() => {
         this.connect(serverUrl);
       }, this.reconnectDelay);
     } else {
-      console.error('❌ Max reconnection attempts reached');
+      console.error("❌ Max reconnection attempts reached");
     }
   }
 
@@ -67,7 +68,7 @@ class SocketClient {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
     } else {
-      console.error('❌ Socket is not connected');
+      console.error("❌ Socket is not connected");
     }
   }
 
@@ -88,6 +89,22 @@ class SocketClient {
 
   isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+  }
+
+  async sendFile(file: File, sender: string) {
+    const arrayBuffer = await file.arrayBuffer();
+
+    // ✅ Convert ArrayBuffer → Base64 (browser safe)
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+    this.send({
+      type: "file",
+      sender,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      fileData: base64, // ✅ FIXED → matches Message interface
+    });
   }
 }
 
