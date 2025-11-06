@@ -3,12 +3,20 @@ package com.chatapp.model;
 import com.google.gson.Gson;
 
 public class Message {
-    private String type; // "message", "login", "register", "user_list", "status", "private_message", "typing"
+
+    private String type; // message, private_message, login, register, file, typing, user_list,
+                         // user_joined...
     private String sender;
-    private String receiver; // null for public messages
+    private String receiver;
     private String content;
     private long timestamp;
     private String username;
+
+    // ✅ File fields
+    private String fileName;
+    private String fileType;
+    private long fileSize;
+    private String fileData; // Base64 string
 
     public Message() {
         this.timestamp = System.currentTimeMillis();
@@ -29,7 +37,8 @@ public class Message {
         this.timestamp = System.currentTimeMillis();
     }
 
-    // Getters and Setters
+    // ======== Getters and Setters =========
+
     public String getType() {
         return type;
     }
@@ -78,13 +87,46 @@ public class Message {
         this.username = username;
     }
 
-    // Convert to JSON
+    // ✅ FILE FIELD GETTERS & SETTERS
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public String getFileType() {
+        return fileType;
+    }
+
+    public void setFileType(String fileType) {
+        this.fileType = fileType;
+    }
+
+    public long getFileSize() {
+        return fileSize;
+    }
+
+    public void setFileSize(long fileSize) {
+        this.fileSize = fileSize;
+    }
+
+    public String getFileData() {
+        return fileData;
+    }
+
+    public void setFileData(String fileData) {
+        this.fileData = fileData;
+    }
+
+    // ✅ JSON Convert
     public String toJson() {
         Gson gson = new Gson();
         return gson.toJson(this);
     }
 
-    // Create from JSON
     public static Message fromJson(String json) {
         Gson gson = new Gson();
         return gson.fromJson(json, Message.class);
@@ -99,6 +141,10 @@ public class Message {
                 ", content='" + content + '\'' +
                 ", timestamp=" + timestamp +
                 ", username='" + username + '\'' +
+                ", fileName='" + fileName + '\'' +
+                ", fileType='" + fileType + '\'' +
+                ", fileSize=" + fileSize +
+                ", fileData length=" + (fileData != null ? fileData.length() : 0) +
                 '}';
     }
 }
