@@ -17,18 +17,31 @@ export interface Message {
     | 'typing'
     | 'history'
     | 'error'
-    | 'file';
+    | 'file'
+    | 'files_list';
 
   sender?: string;
   receiver?: string;
-  content: string;
+  content: string | FileContent;
   username?: string;
   timestamp?: number;
+  files?: StoredFile[];
+}
 
-  fileName?: string;
-  fileType?: string;
-  fileSize?: number;
-  fileData?: string; // base64 file
+export interface FileContent {
+  filename: string;
+  type: string;
+  data: string; // base64 file
+}
+
+export interface StoredFile {
+  id: number;
+  filename: string;
+  fileType: string;
+  data: string;
+  sender: string;
+  receiver?: string;
+  timestamp: number;
 }
 
 

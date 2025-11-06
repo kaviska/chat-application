@@ -45,13 +45,35 @@ export function MessageInput({ onSendMessage, onSendFile, disabled }: MessageInp
         />
 
         {/* ✅ File uploader */}
-        <input
-          type="file"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onSendFile(file);
-          }}
-        />
+        <label className="cursor-pointer p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                console.log("Selected file:", file.name, file.type);
+                onSendFile(file);
+                e.target.value = ''; // Reset for allowing same file selection
+              }
+            }}
+            disabled={disabled}
+          />
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="24" 
+            height="24" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            className="text-gray-500"
+          >
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+          </svg>
+        </label>
 
         <button
           type="submit"

@@ -91,19 +91,39 @@ class SocketClient {
     return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
   }
 
-  async sendFile(file: File, sender: string) {
-    const arrayBuffer = await file.arrayBuffer();
-
-    // ✅ Convert ArrayBuffer → Base64 (browser safe)
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-    this.send({
-      type: "file",
-      sender,
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      fileData: base64, // ✅ FIXED → matches Message interface
+  async sendFile(file: File, sender: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = () => {
+        try {
+          const base64Data = reader.result as string;
+          
+          this.send({
+            type: "file",
+            sender,
+            content: {
+              filename: file.name,
+              type: file.type,
+              data: base64Data,
+            },
+          });
+          
+          console.log("📤 Sending file:", file.name, "Type:", file.type, "Size:", file.size);
+          resolve();
+        } catch (error) {
+          console.error("❌ Error sending file:", error);
+          reject(error);
+        }
+      };
+      
+      reader.onerror = () => {
+        console.error("❌ Error reading file:", reader.error);
+        reject(reader.error);
+      };
+      
+      // Read the file as a data URL (automatically handles base64 encoding)
+      reader.readAsDataURL(file);
     });
   }
 }

@@ -8,7 +8,7 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { MessageInput } from "@/components/MessageInput";
 import { UserList } from "@/components/UserList";
 import { LogOut, MessageCircle } from "lucide-react";
-import { User, Message } from "@/types";
+import { User, Message, StoredFile, FileContent } from "@/types";
 
 export default function ChatPage() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -16,6 +16,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [storedFiles, setStoredFiles] = useState<StoredFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +30,9 @@ export default function ChatPage() {
         await socketClient.connect("ws://localhost:8082");
         setIsConnected(true);
 
+        // Request stored files
+        socketClient.send({ type: "get_files" });
+
         socketClient.on("*", (message: Message) => {
           switch (message.type) {
             // ✅ Normal text messages
@@ -41,19 +45,46 @@ export default function ChatPage() {
 
             // ✅ File message
             case "file":
+              const fileContent = message.content as FileContent;
               setMessages((prev) => [
                 ...prev,
                 {
                   ...message,
-                  content: `${message.sender} sent a file`,
+                  content: fileContent
                 },
               ]);
+              break;
+
+            // ✅ Files list response
+            case "files_list":
+              const files = message.files || [];
+              setStoredFiles(files);
+              // Add file messages to chat
+              files.forEach((file: StoredFile) => {
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    type: "file",
+                    sender: file.sender,
+                    receiver: file.receiver,
+                    timestamp: file.timestamp,
+                    content: {
+                      filename: file.filename,
+                      type: file.fileType,
+                      data: file.data
+                    }
+                  } as Message,
+                ]);
+              });
+              break;
               break;
 
             // ✅ Online users list
             case "user_list":
               try {
-                const users = JSON.parse(message.content);
+                const users = typeof message.content === 'string' 
+                  ? JSON.parse(message.content)
+                  : message.content;
                 setOnlineUsers(users);
               } catch {
                 console.error("Invalid user list format");
@@ -63,7 +94,9 @@ export default function ChatPage() {
             // ✅ History
             case "history":
               try {
-                const history = JSON.parse(message.content);
+                const history = typeof message.content === 'string'
+                  ? JSON.parse(message.content)
+                  : message.content;
                 setMessages(history);
               } catch {
                 console.error("Invalid history message format");
