@@ -44,6 +44,13 @@
             <artifactId>slf4j-simple</artifactId>
             <version>2.0.9</version>
         </dependency>
+
+        <!-- WebSocket Support -->
+        <dependency>
+            <groupId>org.java-websocket</groupId>
+            <artifactId>Java-WebSocket</artifactId>
+            <version>1.5.4</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -64,7 +71,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.chatapp.server.MainServer</mainClass>
+                            <mainClass>com.chatapp.server.IntegratedChatServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -76,7 +83,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.chatapp.server.MainServer</mainClass>
+                            <mainClass>com.chatapp.server.IntegratedChatServer</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
