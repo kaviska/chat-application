@@ -34,4 +34,7 @@ export interface ChatMessage {
   messages?: Message[];
   message?: string;
   isTyping?: boolean;
+  otherUserEmail?: string;
+  otherUserType?: string;
+  password?: string;
 }

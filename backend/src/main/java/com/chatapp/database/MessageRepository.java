@@ -35,6 +35,19 @@ public class MessageRepository {
         }
     }
 
+    // Backwards-compatible overload used by older server code
+    public boolean saveMessage(String senderEmail, String receiverEmail, String content) {
+        Message message = new Message();
+        message.setSenderEmail(senderEmail);
+        message.setSenderType("member");
+        message.setReceiverEmail(receiverEmail);
+        message.setReceiverType(receiverEmail == null ? null : "member");
+        message.setMessage(content);
+        message.setTimestamp(java.time.LocalDateTime.now());
+        message.setRead(false);
+        return saveMessage(message);
+    }
+
     public List<Message> getConversation(String user1Email, String user1Type, 
                                         String user2Email, String user2Type) {
         String sql = "SELECT * FROM messages WHERE " +
@@ -112,6 +125,36 @@ public class MessageRepository {
             e.printStackTrace();
         }
         
+        return messages;
+    }
+
+    // Return recent public messages (where receiver_email IS NULL)
+    public List<Message> getRecentPublicMessages(int limit) {
+        String sql = "SELECT * FROM messages WHERE receiver_email IS NULL ORDER BY timestamp DESC LIMIT ?";
+        List<Message> messages = new ArrayList<>();
+
+        try (Connection conn = dbManager.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, limit);
+            ResultSet rs = pstmt.executeQuery();
+
+            while (rs.next()) {
+                Message message = new Message();
+                message.setId(rs.getInt("id"));
+                message.setSenderEmail(rs.getString("sender_email"));
+                message.setSenderType(rs.getString("sender_type"));
+                message.setReceiverEmail(rs.getString("receiver_email"));
+                message.setReceiverType(rs.getString("receiver_type"));
+                message.setMessage(rs.getString("message"));
+                message.setTimestamp(rs.getTimestamp("timestamp").toLocalDateTime());
+                message.setRead(rs.getBoolean("is_read"));
+                messages.add(message);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         return messages;
     }
 

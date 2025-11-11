@@ -175,4 +175,60 @@ public class UserAuthService {
         
         return users;
     }
+
+    // Get a user by email (search both members and admins)
+    public User getUserByEmail(String email) {
+        try (Connection conn = dbManager.getConnection()) {
+            String[] tables = {"members", "admins"};
+            for (String table : tables) {
+                String sql = "SELECT id, email, username, status FROM " + table + " WHERE email = ?";
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, email);
+                    ResultSet rs = pstmt.executeQuery();
+                    if (rs.next()) {
+                        User user = new User();
+                        user.setId(rs.getInt("id"));
+                        user.setEmail(rs.getString("email"));
+                        user.setUsername(rs.getString("username"));
+                        user.setStatus(rs.getString("status"));
+                        user.setUserType(table.equals("admins") ? "admin" : "member");
+                        return user;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // Backwards-compatible helper used by server code that calls getOnlineUsers() with no args
+    public List<User> getOnlineUsers() {
+        // default to members
+        return getOnlineUsers("member");
+    }
+
+    // Backwards-compatible register/login/update signatures
+    public boolean register(String email, String password, String username) {
+        return registerMember(email, password, username);
+    }
+
+    public User login(String email, String password) {
+        // try member first, then admin
+        User user = loginMember(email, password);
+        if (user == null) {
+            user = loginAdmin(email, password);
+        }
+        return user;
+    }
+
+    public boolean updateUserStatus(String email, String status) {
+        // default to member type when userType not provided
+        // Attempt update for members first, then admins
+        boolean ok = updateUserStatus(email, "member", status);
+        if (!ok) {
+            ok = updateUserStatus(email, "admin", status);
+        }
+        return ok;
+    }
 }

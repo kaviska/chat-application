@@ -62,4 +62,13 @@ public class DatabaseManager {
             }
         }
     }
+
+    // Helper used by server startup checks
+    public boolean testConnection() {
+        try (Connection conn = getConnection()) {
+            return conn != null && !conn.isClosed();
+        } catch (SQLException e) {
+            return false;
+        }
+    }
 }

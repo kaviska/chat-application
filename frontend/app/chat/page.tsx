@@ -1,22 +1,24 @@
-'use client';
+"use client";
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/context';
-import { socketClient } from '@/lib/socket';
-import { MessageBubble } from '@/components/MessageBubble';
+import { useChat } from '@/lib/context';
+import { wsService } from '@/lib/socket';
+import MessageBubble from '@/components/MessageBubble';
 import { MessageInput } from '@/components/MessageInput';
-import { UserList } from '@/components/UserList';
+import UserList from '@/components/UserList';
 import { LogOut, MessageCircle } from 'lucide-react';
 import { User, Message } from '@/types';
 
 export default function ChatPage() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { currentUser: user, logout } = useChat();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const isAuthenticated = !!user;
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -27,43 +29,44 @@ export default function ChatPage() {
     // Connect to server
     const connectToServer = async () => {
       try {
-        await socketClient.connect('ws://localhost:8082');
+        await wsService.connect();
         setIsConnected(true);
 
         // Setup message handlers
-        socketClient.on('*', (message: Message) => {
+        wsService.onMessage((message: any) => {
           switch (message.type) {
             case 'message':
             case 'private_message':
             case 'user_joined':
             case 'user_left':
+              // If server sends Message-shaped payloads, try to normalize
               setMessages((prev) => [...prev, message]);
               break;
-            
+
             case 'user_list':
-              const users = JSON.parse(message.content);
-              setOnlineUsers(users);
+              try {
+                const users = Array.isArray(message.users) ? message.users : JSON.parse(message.content || '[]');
+                setOnlineUsers(users);
+              } catch (e) {
+                console.error('Failed to parse user_list', e);
+              }
               break;
-            
+
             case 'history':
-              const history = JSON.parse(message.content);
-              setMessages(history);
+            case 'conversation_history':
+              try {
+                const history = Array.isArray(message.messages) ? message.messages : JSON.parse(message.content || '[]');
+                setMessages(history);
+              } catch (e) {
+                console.error('Failed to parse history', e);
+              }
               break;
           }
         });
 
-        // If already logged in via localStorage, just get history
-        socketClient.send({
-          type: 'get_history',
-          sender: user.email,
-          content: '',
-        });
-
-        socketClient.send({
-          type: 'get_users',
-          sender: user.email,
-          content: '',
-        });
+        // Request history and users
+        wsService.send({ type: 'get_history', senderEmail: user.email, content: '' });
+        wsService.send({ type: 'get_users', senderEmail: user.email, content: '' });
 
       } catch (error) {
         console.error('Failed to connect:', error);
@@ -74,7 +77,7 @@ export default function ChatPage() {
     connectToServer();
 
     return () => {
-      socketClient.disconnect();
+      wsService.disconnect();
     };
   }, [isAuthenticated, user, router]);
 
@@ -86,20 +89,16 @@ export default function ChatPage() {
   const handleSendMessage = (content: string) => {
     if (!isConnected || !user) return;
 
-    socketClient.send({
-      type: 'message',
-      sender: user.email,
-      content,
-    });
+    if (selectedUser) {
+      wsService.send({ type: 'private_message', senderEmail: user.email, receiverEmail: selectedUser.email, content });
+    } else {
+      wsService.send({ type: 'message', senderEmail: user.email, content });
+    }
   };
 
   const handleLogout = () => {
-    socketClient.send({
-      type: 'logout',
-      sender: user?.email,
-      content: '',
-    });
-    socketClient.disconnect();
+    wsService.send({ type: 'logout', senderEmail: user?.email, content: '' });
+    wsService.disconnect();
     logout();
     router.push('/login');
   };
@@ -159,23 +158,29 @@ export default function ChatPage() {
               </div>
             ) : (
               <>
-                {messages.map((message, index) => (
-                  <MessageBubble key={index} message={message} />
-                ))}
+                    {messages.map((message, index) => (
+                      <MessageBubble key={index} message={message} isOwn={message.senderEmail === user?.email} />
+                    ))}
                 <div ref={messagesEndRef} />
               </>
             )}
           </div>
 
           {/* Message Input */}
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            disabled={!isConnected}
-          />
+          <MessageInput onSendMessage={handleSendMessage} disabled={!isConnected} />
         </div>
 
         {/* User List Sidebar */}
-        <UserList users={onlineUsers} currentUserEmail={user?.email} />
+        <UserList
+          users={onlineUsers}
+          selectedUser={selectedUser}
+          onSelectUser={(u) => {
+            setSelectedUser(u);
+            // request conversation with selected user
+            wsService.send({ type: 'get_conversation', otherUserEmail: u.email });
+          }}
+          title="Online Users"
+        />
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 package com.chatapp.model;
 
 import java.time.LocalDateTime;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 
 public class Message {
     private int id;
@@ -11,6 +13,9 @@ public class Message {
     private String message;
     private LocalDateTime timestamp;
     private boolean isRead;
+    // Compatibility / helper fields used by older server code
+    private String type;
+    private String username; // alias for sender's username
 
     public Message() {}
 
@@ -23,6 +28,66 @@ public class Message {
         this.message = message;
         this.timestamp = LocalDateTime.now();
         this.isRead = false;
+    }
+
+    // Compatibility getters/setters used by older code
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getContent() {
+        return this.message;
+    }
+
+    public void setContent(String content) {
+        this.message = content;
+    }
+
+    public String getSender() {
+        return this.senderEmail;
+    }
+
+    public void setSender(String sender) {
+        this.senderEmail = sender;
+    }
+
+    public String getReceiver() {
+        return this.receiverEmail;
+    }
+
+    public void setReceiver(String receiver) {
+        this.receiverEmail = receiver;
+    }
+
+    public String getUsername() {
+        return this.username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    // timestamp compatibility: accept epoch millis
+    public void setTimestamp(long epochMillis) {
+        try {
+            this.timestamp = LocalDateTime.ofEpochSecond(epochMillis / 1000, (int)(epochMillis % 1000) * 1000000, java.time.ZoneOffset.systemDefault().getRules().getOffset(java.time.Instant.now()));
+        } catch (Exception e) {
+            // fallback: set to now
+            this.timestamp = LocalDateTime.now();
+        }
+    }
+
+    // JSON helpers
+    public String toJson() {
+        return new Gson().toJson(this);
+    }
+
+    public static Message fromJson(String json) throws JsonSyntaxException {
+        return new Gson().fromJson(json, Message.class);
     }
 
     // Getters and Setters
