@@ -68,6 +68,9 @@ public class DatabaseManager {
         try (Connection conn = getConnection()) {
             return conn != null && !conn.isClosed();
         } catch (SQLException e) {
+            // Print the exception so we can see why connection failed (auth/network/etc.)
+            System.err.println("Database connection test failed: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
